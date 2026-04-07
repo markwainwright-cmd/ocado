@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ocado Influencer Network Map</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,300&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #0a0e17;
+  color: #e0e4ec;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#network { width: 100%; height: 100%; }
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(14, 18, 30, 0.96);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  max-width: 320px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.tooltip.visible { opacity: 1; }
+.tooltip .name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.tooltip .occ { color: #8b93a5; font-size: 11.5px; margin-bottom: 8px; font-style: italic; }
+.tooltip .stat { display: flex; justify-content: space-between; gap: 16px; }
+.tooltip .stat span { color: #8b93a5; }
+.tooltip .stat strong { color: #e0e4ec; }
+.tooltip .cat-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.legend {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  background: rgba(14, 18, 30, 0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 16px 20px;
+  backdrop-filter: blur(12px);
+  z-index: 50;
+}
+.legend h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #5a6378;
+  margin-bottom: 10px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 0.2s;
+}
+.legend-item.dimmed { opacity: 0.3; }
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.header {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 50;
+}
+.header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, #64b5f6, #ce93d8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.header p {
+  font-size: 12px;
+  color: #5a6378;
+  margin-top: 4px;
+}
+
+.controls {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 50;
+  display: flex;
+  gap: 8px;
+}
+.controls button {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #8b93a5;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.controls button:hover {
+  background: rgba(255,255,255,0.12);
+  color: #e0e4ec;
+}
+.controls button.active {
+  background: rgba(100, 181, 246, 0.15);
+  border-color: rgba(100, 181, 246, 0.3);
+  color: #64b5f6;
+}
+
+.search-box {
+  position: absolute;
+  top: 20px;
+  right: 350px;
+  z-index: 50;
+}
+.search-box input {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #e0e4ec;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 11.5px;
+  width: 200px;
+  outline: none;
+}
+.search-box input::placeholder { color: #5a6378; }
+.search-box input:focus {
+  border-color: rgba(100, 181, 246, 0.4);
+  background: rgba(255,255,255,0.09);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Ocado Influencer Network</h1>
+  <p>LinkedIn commenting relationships between key voices</p>
+</div>
+
+<div class="search-box">
+  <input type="text" id="searchInput" placeholder="Search profiles…">
+</div>
+
+<div class="controls">
+  <button id="btnReset">Reset View</button>
+  <button id="btnLabels" class="active">Labels</button>
+  <button id="btnStrength">Tighten</button>
+</div>
+
+<div id="tooltip" class="tooltip"></div>
+
+<div class="legend" id="legend"></div>
+
+<svg id="network"></svg>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const rawNodes = [{"id": "Mark Tsemak", "category": "Wider Community", "occupation": "Keto PowerFlax Baking Mix Inventor", "url": "https://www.linkedin.com/in/mark-tsemak-4ab0b6177/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQH6SW9BMoK5uw/profile-displayphoto-crop_800_800/B56Zr0IB.8JwAI-/0/1765032338082?e=1776902400&v=beta&t=9w-G7q_9kv7hJ1VPMH-XDIGKRdOeIg-kOsM0dmKc_u8", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 42, "isCore": false, "isKeyInfluencer": false}, {"id": "Guy Taylor", "category": "Media & Journalist", "occupation": "Retail Correspondent at The Times", "url": "https://www.linkedin.com/in/guy-taylor-490a691a6", "picture": "", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "Isabella Fish", "category": "Media & Journalist", "occupation": "Retail Editor - MHP 30 under 30", "url": "https://www.linkedin.com/in/isabella-fish-064015a7", "picture": "", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 1, "isCore": true, "isKeyInfluencer": true}, {"id": "Ashley Rogers", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/ashley-rogers-3198aaa3?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABYF_0UB23Um-63kvrBI_00fb50caxNp4Dc", "picture": "https://media.licdn.com/dms/image/v2/D5603AQFAo70Lwx0e0A/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1729130939030?e=1776902400&v=beta&t=T7-3wDQ5jrqStA8glilrwc44VgAfKKQec7Yld3AzURs", "followers": "", "posts": 6, "totalLikes": 1213, "totalComments": 334, "edgeWeight": 8, "isCore": true, "isKeyInfluencer": false}, {"id": "Robert Garrison", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/robertwgarrison?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAA-WVoBoUMahURU4-jDKQccXAyPPTwxmx0", "picture": "https://media.licdn.com/dms/image/v2/D5603AQGwaqe463I6nQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1731017341015?e=1776902400&v=beta&t=czDYOne7o8JsE1UJLC0LX5-lFO3omElqskv4qZXZoGs", "followers": "", "posts": 68, "totalLikes": 555, "totalComments": 139, "edgeWeight": 1, "isCore": true, "isKeyInfluencer": true}, {"id": "Peter Michael  Gialantzis", "category": "Wider Community", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/peter-michael-gialantzis-a14a1b88/", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQGH4juPv2pvcw/profile-displayphoto-shrink_800_800/B4DZhRjjqgG8Ac-/0/1753714933116?e=1776902400&v=beta&t=qAyS0D9eqGWxYK9ZeRyUMwMqe4McvzVYtp9DJv0NvHw", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 119, "isCore": false, "isKeyInfluencer": false}, {"id": "Victoria Morel", "category": "Wider Community", "occupation": "Marketing Lead @automaterev.ops. | Turning LinkedIn into a repeatable pipeline system with Clay", "url": "https://www.linkedin.com/in/victoria-morel/", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQGTNjk39hofbg/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1732301794157?e=1776902400&v=beta&t=eOCYIknJRhuRzi_Hs1kKGV59UADg3a7O7A-Fcc_SgQY", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 54, "isCore": false, "isKeyInfluencer": false}, {"id": "Sachin G.", "category": "Wider Community", "occupation": "Builder | Forbes Next1000 | IIT | Techstars | SAP.IO | Angel investor and advisor", "url": "https://www.linkedin.com/in/sachinkrgarg/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQFdjDMnJG8vDA/profile-displayphoto-crop_800_800/B56Ze_pTdvGQAI-/0/1751266967078?e=1776902400&v=beta&t=PNQLq7dpb3mLpldF0bGwXXGpVyZPbQhGaL0etBgcR7c", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 26, "isCore": false, "isKeyInfluencer": false}, {"id": "Sean Field", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/seanfield73?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAANbuCIBg7D6E9jcrHZdI9kM7iZj76HVlEY", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGtEJvxY6doIw/profile-displayphoto-shrink_800_800/B4EZdg2UhcHYAg-/0/1749676543000?e=1776902400&v=beta&t=LoxIWJHIRa64LKgxJUfOKGNAdrxUeVmBeF-YC1LmgL4", "followers": "", "posts": 259, "totalLikes": 7002, "totalComments": 895, "edgeWeight": 90, "isCore": true, "isKeyInfluencer": true}, {"id": "Seth Yakatan", "category": "Wider Community", "occupation": "Raising & Selling \ud83d\udcc8 $1B+ Raised \ud83d\udcb0 22 Companies Sold \ud83e\udd1d", "url": "https://www.linkedin.com/in/seth-yakatan/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQFXM3b3YjAgXA/profile-displayphoto-crop_800_800/B56ZxAxMGVJMAI-/0/1770613162827?e=1776902400&v=beta&t=XtD7CD3C_C-Zzit0zdiCeZbrVniiQBa53sZukcL5-hE", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 74, "isCore": false, "isKeyInfluencer": false}, {"id": "Lukas M. Ziegler", "category": "Retail & Tech Commentator", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/zieglerr?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAACVZUhoBkcEY-NNKZUArgk5HSSFPgWLWlGA", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQFcx-loCoUTBQ/profile-displayphoto-crop_800_800/B4DZgy.2HNGsAI-/0/1753201992758?e=1776902400&v=beta&t=3LvBoo8GGO4qRcR5nZmqa-YFWizDmGnB2N1rUPJVyso", "followers": "", "posts": 2, "totalLikes": 438, "totalComments": 38, "edgeWeight": 26, "isCore": true, "isKeyInfluencer": false}, {"id": "Eric Williams", "category": "Wider Community", "occupation": "You don\u2019t need more time. You need better tools. Aut cum scuto, aut in scuto", "url": "https://www.linkedin.com/in/eric-williams-a7826b6/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEIIU4C5rfIeQ/profile-displayphoto-crop_800_800/B4EZxaBuUAHMAM-/0/1771036928512?e=1776902400&v=beta&t=TXHnhHORRFghpJ6B8XNj-8vRLPUZwwZNsb6wKwBg6Rw", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 28, "isCore": false, "isKeyInfluencer": false}, {"id": "Joi A. McMillon BSN-MBA HA-CRRN-WCC-HACP-CMS-CIC- AL-CIP", "category": "Wider Community", "occupation": "C.E.O. | Infection Control SME | Clinical Quality Improvement Consultant| Miami-Dade County APIC Chapter Immediate Past President | Professional Speaker | Author", "url": "https://www.linkedin.com/in/joi-a-mcmillon-bsn-mba-ha-crrn-wcc-hacp-cms-cic-al-cip-139b26a5/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGc9rsdvoThiA/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1725292479459?e=1776902400&v=beta&t=qGVbZU-2eQ5QnVKhanMAkpPX7AHCNhvDW0y3QwY1rnU", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 157, "isCore": false, "isKeyInfluencer": false}, {"id": "Jon Stine", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/jonstine?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAaYawB-W2hXyjDFs27YyXSDtS6mXUr86E", "picture": "https://media.licdn.com/dms/image/v2/C5603AQGgfWHbNRVJ1w/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1624752839579?e=1776902400&v=beta&t=RRGqw958FsCG4D6d_8e2UgGbo0X0iATIMlMJ2p2tqR0", "followers": "", "posts": 2, "totalLikes": 66, "totalComments": 4, "edgeWeight": 4, "isCore": true, "isKeyInfluencer": false}, {"id": "Shreya Vohora", "category": "Wider Community", "occupation": "Lifestyle Architect | Health-First Interior & Architectural Design | Building the Future of Personalised Wellness | Tech AI Founder | Adviser\u00a0| TEDx Speaker | Creating Environments & Lifestyles that Heal \ud83c\udf31\u2764\ufe0f\u200d\ud83e\ude79", "url": "https://www.linkedin.com/in/shreyavohora/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEsMEjWMC-8hw/profile-displayphoto-crop_800_800/B4EZev.oqQHYAI-/0/1751004122908?e=1776902400&v=beta&t=-4qvYjpwAVBeE5ZMzzMJUmRBqvbbdJwusREnh20KNY4", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 32, "isCore": false, "isKeyInfluencer": false}, {"id": "Mathieu Carpentier", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/mathieu-carpentier?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAmHv5MBy0N6eOeJY0IS0TAeqh_GeYc4fwU", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGYpy9hCJCvXA/profile-displayphoto-crop_800_800/B4EZsw8rdeKkAI-/0/1766052773363?e=1776902400&v=beta&t=rDNY88HdU-9T_Dsd6ae1WIiHcLkHEbONhRIpr9sze1Y", "followers": "", "posts": 8, "totalLikes": 276, "totalComments": 76, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "Jackson Pinkoski", "category": "Wider Community", "occupation": "Founder of Pinkberg, the first marketing agency focused on clients profits | Currently responsible for over $10M in profits across 15 clients | 3X your profits in 90 days, want to be number 16?", "url": "https://www.linkedin.com/in/jpinkoski/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQGi-CVCnC0jIw/profile-displayphoto-shrink_800_800/B56ZdsJIVPHoAc-/0/1749866022629?e=1776902400&v=beta&t=Ec2GGRHykgxFyRJOTzgG3UNhjRy-z2KgWT5e1K6m0XI", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 34, "isCore": false, "isKeyInfluencer": false}, {"id": "Megan Harmon", "category": "Wider Community", "occupation": "Clearing the path for scalable growth through brand protection. Managing Partner, ThornCrest | Channel & Marketplace Strategy", "url": "https://www.linkedin.com/in/meharmon/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQG7gyUblHVH-g/profile-displayphoto-crop_800_800/B56ZxxdGoPJAAI-/0/1771429982218?e=1776902400&v=beta&t=soB1eYCUcT0YOQUhY6Xeq2I7nk3lxfV7Ep_YzkLxqBc", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 31, "isCore": false, "isKeyInfluencer": false}, {"id": "Jeremy Baksht", "category": "Wider Community", "occupation": "Founder & CEO of Catena Clearing", "url": "https://www.linkedin.com/in/baksht/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQF_y2ywF63Kdw/profile-displayphoto-crop_800_800/B4EZxyBnSRIYAI-/0/1771439556202?e=1776902400&v=beta&t=8QOVHuAaA30GH4u3wqrpk9YUolafaXvm9yZDT1bdM0U", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 28, "isCore": false, "isKeyInfluencer": false}, {"id": "Jeff Strasser", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/jeffstrasser?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAACKaucBers5bWU2swZAgxm6MMOca9CrgV4", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEXRf03FMmCVw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1705599581080?e=1776902400&v=beta&t=Z6G-UvYSP06_Gf4WfjpwwMZyOHVRoSS17U7yNx-Pl84", "followers": "", "posts": 6, "totalLikes": 242, "totalComments": 18, "edgeWeight": 5, "isCore": true, "isKeyInfluencer": false}, {"id": "Incisiv", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/company/incisiv/posts", "picture": "https://media.licdn.com/dms/image/v2/D4D0BAQFQgDqvhixk0A/company-logo_400_400/B4DZXwomI.HkAY-/0/1743498929153/incisiv_logo?e=1776902400&v=beta&t=wyrw1PZTA9MQbt6gVfSDqLDf0vWCTMZ16A3ZaUCCNuE", "followers": "9,575", "posts": 2, "totalLikes": 43, "totalComments": 7, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "Sean Wendt", "category": "Wider Community", "occupation": "founder @ dtcmvp | shopify's modern expert network (invite only)", "url": "https://www.linkedin.com/in/seanwendt/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQGapexxjymM1g/profile-displayphoto-crop_800_800/B56ZnwK7x2KAAM-/0/1760671025683?e=1776902400&v=beta&t=AsYhFmJjCyXMznZVH-7ZQqwIFDJNtYf0otEpkDfrBiE", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 26, "isCore": false, "isKeyInfluencer": false}, {"id": "Brendon Gardner", "category": "Wider Community", "occupation": "Merchandiser | Brand Ambassador", "url": "https://www.linkedin.com/in/brendon-gardner-19142694/", "picture": "https://media.licdn.com/dms/image/v2/D4E35AQGV10D108hwiQ/profile-framedphoto-shrink_800_800/B4EZcYt0.yHQAg-/0/1748466356465?e=1776171600&v=beta&t=Biy25CpaDI5HwdJJ99UpQv5Y0eZ1wiXxVxdWLzGgYd8", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 45, "isCore": false, "isKeyInfluencer": false}, {"id": "Martin Hinojosa", "category": "Wider Community", "occupation": "Creating Unforgettable Sports & Corporate Travel Experiences | Partnering with Global Brands to Deliver Seamless Incentive Programs & Activations", "url": "https://www.linkedin.com/in/martin-hinojosa-a3b66455/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQGXADrlI365yA/profile-displayphoto-shrink_800_800/B56ZTyG5NzHoAc-/0/1739228681348?e=1776902400&v=beta&t=3Dye1EIihbSe3o_o6P2b0FGAH8Rm2VlnMRRiQbiy1sY", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 85, "isCore": false, "isKeyInfluencer": false}, {"id": "Peter Michael Gialantzis", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/peter-michael-gialantzis-a14a1b88?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABKpGPABb9FeY7Ha3u4tB2GYmrU6U1xF1w8", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQGH4juPv2pvcw/profile-displayphoto-shrink_800_800/B4DZhRjjqgG8Ac-/0/1753714933116?e=1776902400&v=beta&t=qAyS0D9eqGWxYK9ZeRyUMwMqe4McvzVYtp9DJv0NvHw", "followers": "", "posts": 452, "totalLikes": 15129, "totalComments": 3720, "edgeWeight": 640, "isCore": true, "isKeyInfluencer": true}, {"id": "Julia Rowe", "category": "Ocado", "occupation": "Sustainability Director | Strategy setting | ESG reporting | Net Zero | Circular Economy | Responsible Sourcing | Responsible AI | HSE | TCFD | CSRD | Transformation | Leading | Coaching | Collaborating | FTSE100", "url": "https://www.linkedin.com/in/julia-rowe-phd", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQH-8kXDqHH20g/profile-displayphoto-crop_800_800/B4EZfH5omhHYAQ-/0/1751405465261?e=1776902400&v=beta&t=TzBn_CIpUyKQKtEcpDUGdII9lnF-cowNVsOFf7vUfO0", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "Vitalii Honcharenko", "category": "Wider Community", "occupation": "Software Development Services at Yael Acceptic | AI/ML/NLP, Web & Mobile, IoT, E-commerce/learning, Fin/Insur/PropTech, Logistics", "url": "https://www.linkedin.com/in/vitaliihoncharenko/", "picture": "", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 58, "isCore": false, "isKeyInfluencer": false}, {"id": "Rahi Jain", "category": "Wider Community", "occupation": "Subscription LTV Maximizer\u2122 | D2C Retention Specialist | 70%+ 90-Day Repeat Rates", "url": "https://www.linkedin.com/in/rahijain/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQHFxEbEUFf1xg/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1709206658877?e=1776902400&v=beta&t=ZsC3ra21IRj3Se2HEYzoaeOxECrTZEsvdA08x24sF2k", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 61, "isCore": false, "isKeyInfluencer": false}, {"id": "Ben Angel", "category": "Industry Voice", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/warehouseautomation?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAbSqlsBcV0xUjLPop9NXub5_OkCqfNLcUk", "picture": "https://media.licdn.com/dms/image/v2/C5603AQFlzi4BLxCz2A/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1660946560928?e=1776902400&v=beta&t=ufwNpMbCZ5G4IDhPdclosTpTDK6xT2w23bvuprF20-o", "followers": "", "posts": 1, "totalLikes": 177, "totalComments": 8, "edgeWeight": 8, "isCore": true, "isKeyInfluencer": true}, {"id": "Kit Campoy", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/kit-campoy-you-got-this?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAASa9C4BlHoNhjaEULSTDLaK-yNrzQx9GmA", "picture": "https://media.licdn.com/dms/image/v2/D5603AQH8LnHAL1ADtQ/profile-displayphoto-shrink_800_800/B56ZRNC_LYGQAc-/0/1736459416639?e=1776902400&v=beta&t=iR-U4XJzuB9nNkfx1aNH2E0C_NsUeSPSy7KBIpi5WWk", "followers": "", "posts": 2, "totalLikes": 132, "totalComments": 3, "edgeWeight": 5, "isCore": true, "isKeyInfluencer": false}, {"id": "Shelley Bransten", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/shelleybransten?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAABmtfwBlb0fjpBZc46_kwrwTXNCfQNl6v8", "picture": "https://media.licdn.com/dms/image/v2/D5603AQH3MbASNEEuig/profile-displayphoto-shrink_800_800/B56ZbJxXjDGoAc-/0/1747141884868?e=1776902400&v=beta&t=rqLGahNNr9joYuWgmoc1nw_fcnzsAYKqSPs56BAudBU", "followers": "", "posts": 5, "totalLikes": 1540, "totalComments": 67, "edgeWeight": 4, "isCore": true, "isKeyInfluencer": false}, {"id": "\ud83c\udff7 Ricardo Belmar", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/rbelmar?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAABpJcYBvd5HdEqeTVbDcV46vUpys14Jgl8", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEXRf03FMmCVw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1705599581080?e=1776902400&v=beta&t=Z6G-UvYSP06_Gf4WfjpwwMZyOHVRoSS17U7yNx-Pl84", "followers": "", "posts": 261, "totalLikes": 4979, "totalComments": 1649, "edgeWeight": 81, "isCore": true, "isKeyInfluencer": true}, {"id": "Matt Hopkins", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/matthewhopkins1?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAKkrTsBWg2X5GOGy2BGQEN0B5PPYqmaWKc", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQHDKKoLqTH0kw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1723714151315?e=1776902400&v=beta&t=4xHYwGQ3P5iFvKDmMAN0_rPGdarZT9NzFXzbs2gJwWI", "followers": "", "posts": 23, "totalLikes": 994, "totalComments": 94, "edgeWeight": 1, "isCore": true, "isKeyInfluencer": true}, {"id": "Slayton Campbell", "category": "Retail & Tech Commentator", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/slayton-campbell-a7a770171?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAACjeoP4B1zZRacI0VRsKbEh3JfYin7cw1ls", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFZU8AtLgQ9oA/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1707095485147?e=1776902400&v=beta&t=nteA1LAAfpDX4pMo0O5y71AKk6JBu5u1VxB-ZY8Qk_k", "followers": "", "posts": 23, "totalLikes": 805, "totalComments": 40, "edgeWeight": 14, "isCore": true, "isKeyInfluencer": false}, {"id": "Derek Gould", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/derek-gould-cpg?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABGJVeYBN5TMmG9y5jkGwvoshmIXvNOsCkM", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGLLu0vBnWWZw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1725229331820?e=1776902400&v=beta&t=uvBOyz_pEH-W-XQEiIBVpeHxPcMWNstA9KaGDgPfdes", "followers": "", "posts": 2, "totalLikes": 62, "totalComments": 6, "edgeWeight": 59, "isCore": true, "isKeyInfluencer": false}, {"id": "Taylor Walker", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/taylorewalker?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAZdv84BuPA6vgvacmXzDDStA0-AEYlezQQ", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFTGDFQolpn4g/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1686575409892?e=1776902400&v=beta&t=oToqZdyvUGmJY2qMa2GWYivvl1mjmp6Da7pmaqz8PwU", "followers": "", "posts": 1, "totalLikes": 51, "totalComments": 5, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "Alex Harvey", "category": "Corporate Leader", "occupation": "Chief Engineering Officer at Ocado Technology", "url": "https://www.linkedin.com/in/alex-harvey-49b8a316", "picture": "https://media.licdn.com/dms/image/v2/D5603AQHqq8Df3LkF8A/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1709798479353?e=1776902400&v=beta&t=hlVqr9JjPTG6U4jT0LGWwZVgM-MT4bDvEBePSUAYlyc", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 2, "isCore": true, "isKeyInfluencer": true}, {"id": "Tim Shea", "category": "Wider Community", "occupation": "President at JTS Market Intelligence", "url": "https://www.linkedin.com/in/tim-shea-a2a0784/", "picture": "https://media.licdn.com/dms/image/v2/C4E03AQGyDPq5oIqqOQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1550522235525?e=1776902400&v=beta&t=mibUCzI69mo6jMjxS1oGLkNWA3-lMPEgYx7Kto2Envs", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 90, "isCore": false, "isKeyInfluencer": false}, {"id": "Isaac Griffith", "category": "Retail & Tech Commentator", "occupation": "AI-powered Unmanned Retail | Automation & Robotics @Nomagic | Online Grocery | E-commerce SaaS | Sales |", "url": "https://www.linkedin.com/in/isaac-griffith-0949bb149?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAACPsAbABlobnFB1CEIAnaBm1Tj4Dd4PN1yQ", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQHYdMqkhxPPRQ/profile-displayphoto-crop_800_800/B4EZvcTzfOJAAI-/0/1768927738394?e=1776902400&v=beta&t=UsGSR8KWy5Fxh88lkHVsMyFcvag2ZWy-0x_ej_GF_EY", "followers": "", "posts": 2, "totalLikes": 88, "totalComments": 7, "edgeWeight": 19, "isCore": true, "isKeyInfluencer": false}, {"id": "Chris Niesen", "category": "Wider Community", "occupation": "VP Retail Format Development, Space Planning, Visual Merchandising, Customer Experience", "url": "https://www.linkedin.com/in/christopherniesen/", "picture": "", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 34, "isCore": false, "isKeyInfluencer": false}, {"id": "Ken Fenyo", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/kenfenyo?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAAzdkBVkDO523Xz0NrqONfYI-NqwCRV0o", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQH1T7QsEs3jhw/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1516929608050?e=1776902400&v=beta&t=wNu68dvkyDNjjKFNe3enQBeBg9oR1tIAckfWoDIqwaM", "followers": "", "posts": 101, "totalLikes": 2409, "totalComments": 529, "edgeWeight": 11, "isCore": true, "isKeyInfluencer": true}, {"id": "Haughey, Stephanie", "category": "Wider Community", "occupation": "whole foods market", "url": "https://www.linkedin.com/in/haughey-stephanie-8453806/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQEzOVhk4KO9Bg/profile-displayphoto-crop_800_800/B56Z0x2lo6GsAI-/0/1774657888988?e=1776902400&v=beta&t=3Z_Ofr0fIQnQJgnXEgQick0iycnp3BXfyY2Ncp_yjNw", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 39, "isCore": false, "isKeyInfluencer": false}, {"id": "Greg Buzek", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/gregbuzek?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAWQ40BSTMFVRNUFNm5tls2ueAKudlsq08", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEAMvDQ_ZNynw/profile-displayphoto-crop_800_800/B4EZsiX8M8HMAI-/0/1765808264190?e=1776902400&v=beta&t=EzBLTyyvkvdnd5Kif1qcndI6rlwev0Ha4yJEe039PLg", "followers": "", "posts": 11, "totalLikes": 271, "totalComments": 59, "edgeWeight": 12, "isCore": true, "isKeyInfluencer": false}, {"id": "Marianna Burchfield", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/mariannaburchfield?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAY3Y0BvplNJd6lrOT8NbTreKNvd5Ueafo", "picture": "https://media.licdn.com/dms/image/v2/D5603AQEr9CI-lPjCEw/profile-displayphoto-crop_800_800/B56Zy8_EhJJgAI-/0/1772697176500?e=1776902400&v=beta&t=bTGHwIno4TzcwPxp6vyTijBe_HDeGZHv9PAkthKP71s", "followers": "", "posts": 1, "totalLikes": 132, "totalComments": 93, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "Florian Palatini", "category": "Retail & Tech Commentator", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/florian-palatini?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAASHv4oBmMj96fq9ehZId3tZQ6U2IqAAKOI", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQGR01_DJUxiYA/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1589644847250?e=1776902400&v=beta&t=v0u7zvNw8BrgnENlcharW6GkHDSFX7qchtNTtd7vzH8", "followers": "", "posts": 5, "totalLikes": 3299, "totalComments": 175, "edgeWeight": 15, "isCore": true, "isKeyInfluencer": false}, {"id": "Graham Soult FIPM", "category": "Retail & Tech Commentator", "occupation": "Passionate and pragmatic retail insights to help build a better industry", "url": "https://www.linkedin.com/in/grahamsoult?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAADOqzIB_1qHHsaYxz02Yw4vykFFTvMy7Xc", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQGn_sVXwHS8RQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1629271882413?e=1776902400&v=beta&t=XvtYveGoBL1HHyMi22W391pR5WQWwXHkKsw8sjZCUCY", "followers": "", "posts": 1, "totalLikes": 90, "totalComments": 15, "edgeWeight": 5, "isCore": true, "isKeyInfluencer": false}, {"id": "Richard Fletcher", "category": "Media & Journalist", "occupation": "Business Editor at The Times", "url": "https://www.linkedin.com/in/richard-fletcher-6593914", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQHisM1THKIqyg/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1611314769392?e=1776902400&v=beta&t=Qzc-ZCbled-O7ObjRvrLbRDVds_iWpzvZ3HYyfFFQ10", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 1, "isCore": true, "isKeyInfluencer": true}, {"id": "Jack Azagury", "category": "Corporate Leader", "occupation": "Director | Practice Lead for Fulfilment & Physical Logistics @Accenture UKI | Chair CILT UK Warehouse Technology & Materials Handling forum | Highly experienced C-Level Logistics / Fulfilment Professional", "url": "https://www.linkedin.com/in/jack-azagury?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAD2qDEBWNMjcu4fpHP-vepHmbRd_xxAs2M", "picture": "https://media.licdn.com/dms/image/v2/C5603AQGnCtD6G4naEw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1616707792622?e=1776902400&v=beta&t=Iop89yTOlPjjf0OA9_9ql2jif7tGmFXOeQMPPD5Fuok", "followers": "", "posts": 2, "totalLikes": 1022, "totalComments": 10, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "William Woods", "category": "Corporate Leader", "occupation": "Head of European Retail, Managing Director, Bernstein", "url": "https://www.linkedin.com/in/william-woods-a039488b", "picture": "", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "David J. Haber", "category": "Wider Community", "occupation": "Chairman\u2019s Office at IQ-G Partners", "url": "https://www.linkedin.com/in/david-j-haber/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFxb7KyG-4ZNQ/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1678813305214?e=1776902400&v=beta&t=LhQS0dHx6U58QneTA5Rxp2iQYE1r4EB1niGb6q8ujhE", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 44, "isCore": false, "isKeyInfluencer": false}, {"id": "Ray Smith", "category": "Corporate Leader", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/raycsmith?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAMfGc0BH8u5kKjZrRxN9X5nkrJ_iFff3tk", "picture": "https://media.licdn.com/dms/image/v2/D5603AQHaNBLjuNY76A/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1722336960348?e=1776902400&v=beta&t=Sn-YyCgNdFGcsE6V9_4Xxwpm0YsL4IuMeNEkv4gl8PM", "followers": "", "posts": 1, "totalLikes": 130, "totalComments": 7, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "Noel Pennington", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/noelp?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAqr-sBKmykI4PEEqRYfKlOEEhk7dUWe-Y", "picture": "https://media.licdn.com/dms/image/v2/C5603AQErNzwFdQ4mrw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1656370649186?e=1776902400&v=beta&t=0Go2Qt9uLFW3cO83sFbIm_jFoIs-bt-t_wLhwShiM-s", "followers": "", "posts": 1, "totalLikes": 6, "totalComments": 2, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "Martin Brickell MBA, BSc(Hons), DMS, CMS, GRSC, IOSH", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/martinbrickell?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAADhovgBLMiGQKZxLK4CB0ajyRlCJNiJDWo", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQHYz8aSOLAKiA/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1606513102666?e=1776902400&v=beta&t=MXSCWkelzfavt7_WOLuYzuEONDkPnNMPDA4G7VFqev0", "followers": "", "posts": 7, "totalLikes": 223, "totalComments": 36, "edgeWeight": 2, "isCore": true, "isKeyInfluencer": true}, {"id": "Curtis Knight II", "category": "Wider Community", "occupation": "Elevating Tastes with Premium Beverages | Co-Founder at Lemonicious Drink Co. | Platform Engineer | YouTuber", "url": "https://www.linkedin.com/in/curtis-knight-ii/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFyBiXnfaNbVg/profile-displayphoto-shrink_800_800/B4EZaiMEQqHoAc-/0/1746477795267?e=1776902400&v=beta&t=9dPY8fgGHpZblewlFBtC_mj_Nxnp1ekg3oLjseeTu5w", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 29, "isCore": false, "isKeyInfluencer": false}, {"id": "Marie-Axelle Loustalot-Forest", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/marieaxelle?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAALspUBlIZ5p545DuPK6hXXk8cFpowRjjk", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQElCxrc8zGPyw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1725554604194?e=1776902400&v=beta&t=ml3UPHu1l609iKGVu1-nRJTsaSG8WhE04BaEBsYy4Z8", "followers": "", "posts": 140, "totalLikes": 2333, "totalComments": 290, "edgeWeight": 82, "isCore": true, "isKeyInfluencer": true}, {"id": "Keith Mercier", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/keithmercier?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAEsr8EB29Cv9dVg1DTnvsb1jxLYCR4FpFA", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFB3hGRS1EU7A/profile-displayphoto-crop_800_800/B4EZwgKrzvJgAI-/0/1770066198193?e=1776902400&v=beta&t=nRtRql6ivoMF_LJPIuFoel7K383Manf5iELtTtQpEDI", "followers": "", "posts": 7, "totalLikes": 914, "totalComments": 39, "edgeWeight": 5, "isCore": true, "isKeyInfluencer": false}, {"id": "Trevor Sumner", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/trevorsumner?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAC_qEB72mfqTC19Ub8ObOtRi786N8cgVg", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFcqNJ-nwfjiQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1719958245508?e=1776902400&v=beta&t=WiiT1Uc84Kv23fGX1x2y09elJyuWvtppd1JbjhUTExg", "followers": "", "posts": 1, "totalLikes": 68, "totalComments": 14, "edgeWeight": 7, "isCore": true, "isKeyInfluencer": false}, {"id": "Peter Skov", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/peterskovnl?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAqoP4BMi3rwvHqJ7pzykLHde8XlfRUZIs", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQE1aoW66IGRsg/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1721028897076?e=1776902400&v=beta&t=REdteUoJT_RyEEtx4lmUYYcBwOTJLE6D8-PHxxP3N2c", "followers": "", "posts": 99, "totalLikes": 3393, "totalComments": 484, "edgeWeight": 72, "isCore": true, "isKeyInfluencer": true}, {"id": "Albin Paul", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/albinpaulxavier?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAUxGj0Bbd1PG38oRtGcC89a40HmfOmu8E4", "picture": "https://media.licdn.com/dms/image/v2/D5603AQHH42FsMgyBbQ/profile-displayphoto-crop_800_800/B56Zk51qY7KEAI-/0/1757611993052?e=1776902400&v=beta&t=oIllBGEL6c-kVy8OpzIbfw9_-k63ynbW0dv0yjRDazI", "followers": "", "posts": 177, "totalLikes": 1243, "totalComments": 149, "edgeWeight": 9, "isCore": true, "isKeyInfluencer": true}, {"id": "Brenda Steele", "category": "Wider Community", "occupation": "Owner: Daily Bread Consulting Owner: INFB (Independent Nat\u2019l Food Brokers) 08.08-01.24 (sold JAN24) 30 yr CPG Prof. @ retail, demo, broker; now working in local & international distribution. Spotify etc Musician.", "url": "https://www.linkedin.com/in/brenda-steele-61873010/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQEQnEi0KKBocA/profile-displayphoto-shrink_800_800/B56Za6yzcTHUAg-/0/1746890603238?e=1776902400&v=beta&t=nkg944U-W4JjK3PB5XiXsJ_aprUTkaY6OswPplSs_nI", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 39, "isCore": false, "isKeyInfluencer": false}, {"id": "Stefano Francavilla", "category": "Retail & Tech Commentator", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/stefano-francavilla-827880106?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABrTTJ8BAuxsvxEpKB5nELEA9vP6R6J8AbM", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQFjDVvus6lQrA/profile-displayphoto-crop_800_800/B4DZrfA027J4AM-/0/1764678127848?e=1776902400&v=beta&t=OTegy1_QL4J7-CO5VRm3g-uTDroQPr36fmHRyVlGuhA", "followers": "", "posts": 7, "totalLikes": 884, "totalComments": 114, "edgeWeight": 8, "isCore": true, "isKeyInfluencer": false}, {"id": "Tom Andersson", "category": "Industry Voice", "occupation": "Principal Analyst & Founder | STIQ Ltd - Freemium Market Research | Supply Chain Tech, Warehouse Automation, Robotics, AI | Avid Networker", "url": "https://www.linkedin.com/in/thomasanderssonuk", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEWwnVhqmOd8Q/profile-displayphoto-shrink_800_800/B4EZOl2VqpHsAc-/0/1733654305916?e=1776902400&v=beta&t=1WTJSMIaEMy6lihdtC4Mv5Ig1k7jSb3gfv1PE_WuOUI", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 10, "isCore": true, "isKeyInfluencer": true}, {"id": "Tim Johnson", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/tim-johnson-370a8821?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAASbyAQBfvhS3jCO9WUAwBkBCJ7yQ8VNPlQ", "picture": "https://media.licdn.com/dms/image/v2/D5603AQFHncEtmZsDIA/profile-displayphoto-shrink_800_800/B56ZP51SQtHQAg-/0/1735063315775?e=1776902400&v=beta&t=Jkz88mCGQP3VyGJsMTYaJAvvmx3JaZOgnJF8tjTzWkg", "followers": "", "posts": 21, "totalLikes": 202, "totalComments": 23, "edgeWeight": 1, "isCore": true, "isKeyInfluencer": true}, {"id": "Brittain Ladd", "category": "Industry Voice", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/brittainladd?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAA_417cBovZsLTF-QChre8_Va0juuSibebU", "picture": "https://media.licdn.com/dms/image/v2/D5603AQElcW_mC9UsYA/profile-displayphoto-crop_800_800/B56ZvypmNkJEAM-/0/1769302552413?e=1776902400&v=beta&t=rM8NCLWxp6Xp_MZdoP3Lj2narG5Wqx8t3ALF4iZsauo", "followers": "", "posts": 1, "totalLikes": 315, "totalComments": 67, "edgeWeight": 28, "isCore": true, "isKeyInfluencer": true}, {"id": "David Abadin \ud83e\udea9", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/david-abadin?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAA65zlgBxokMqQUPgS63vx7CTCD1A8XazR0", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGu4T_adGMeQw/profile-displayphoto-crop_800_800/B4EZkPXseXGUAM-/0/1756899495085?e=1776902400&v=beta&t=MphSp8x5b7guFZgHFuhlePdxO6FI5reNCiP3F7_k_tE", "followers": "", "posts": 120, "totalLikes": 5828, "totalComments": 1033, "edgeWeight": 89, "isCore": true, "isKeyInfluencer": true}, {"id": "Brian Schmitt", "category": "Wider Community", "occupation": "CEO at Surefoot.me | CRO, A/B Testing & Revenue Optimization for Digital Brands and founder at Chief Of | Your AI Chief of Life", "url": "https://www.linkedin.com/in/brianschmitt/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEX6y96LBtVHA/profile-displayphoto-crop_800_800/B4EZtdhoxHIUAI-/0/1766800658624?e=1776902400&v=beta&t=sCZ4F-65HnmRdqjWOPY-orAyKw7vnRfNpIB4p0iMejA", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 35, "isCore": false, "isKeyInfluencer": false}, {"id": "Jai Mishra", "category": "Wider Community", "occupation": "Founder and CEO", "url": "https://www.linkedin.com/in/jaiprakashmishra/", "picture": "https://media.licdn.com/dms/image/v2/C5103AQHi4aJE5aCgGw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1574003987260?e=1776902400&v=beta&t=U6lSYuQkJ91RqIP7eCa4aVR0y41NHeRcMrtUJB0WH-M", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 22, "isCore": false, "isKeyInfluencer": false}, {"id": "Vineta Bajaj", "category": "Ocado Alumni", "occupation": "", "url": "https://www.linkedin.com/in/vineta-bajaj?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAVbwEMBkC9cQ8Jt-tsBaIYN4dJHOUlzhkc", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEy8rsp7cNt3Q/profile-displayphoto-crop_800_800/B4EZjuuVzfIMAM-/0/1756351784015?e=1776902400&v=beta&t=Q6v28WmWdtL_FQ_GqunGJb3zmB7C1fDSVxpulHbVE1A", "followers": "", "posts": 68, "totalLikes": 9665, "totalComments": 789, "edgeWeight": 33, "isCore": true, "isKeyInfluencer": true}, {"id": "James Palmer FCILT", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/jamespalmerstrongpointvp?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABEMhjMBOA92D6v5m-4ksGteM6t9ENQdU-4", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFqLHO6IA5y6Q/profile-displayphoto-crop_800_800/B4EZn2ZUGwHMAI-/0/1760775455692?e=1776902400&v=beta&t=ZZlQXOB2VoRhEuvmzBp_M5O_4lZR5BPWA3nz71MFKW0", "followers": "", "posts": 36, "totalLikes": 1593, "totalComments": 55, "edgeWeight": 11, "isCore": true, "isKeyInfluencer": true}, {"id": "Branislav Pulis", "category": "Retail & Tech Commentator", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/branislavpulis?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAH8MvMBWugy1tUVVt9mW0FcLI_Bq4B_9rU", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQHCCz7dVx50zw/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1667576350098?e=1776902400&v=beta&t=dUswXcYBl_5tCFw4zIEp8xaU-ipmoUn7xu1_VixO2-E", "followers": "", "posts": 9, "totalLikes": 540, "totalComments": 22, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "Samantha Fletcher", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/samantha-fletcher-wholefoods?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAA5hA-oBostFV4N-R0X9z7ceeKyUPrZtOzw", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQGH4juPv2pvcw/profile-displayphoto-shrink_800_800/B4DZhRjjqgG8Ac-/0/1753714933116?e=1776902400&v=beta&t=qAyS0D9eqGWxYK9ZeRyUMwMqe4McvzVYtp9DJv0NvHw", "followers": "", "posts": 1, "totalLikes": 128, "totalComments": 20, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "Can Koyuncu", "category": "Wider Community", "occupation": "Co-Founder & CMO, Chapter Foods - CPG and Premium Private Label Manufacturing", "url": "https://www.linkedin.com/in/can-koyuncu-063557162/", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQGaDfUe8ulAIg/profile-displayphoto-crop_800_800/B4DZjwIc3UGQAM-/0/1756375404668?e=1776902400&v=beta&t=tqE_3Lh0bAff4Lkt23p2grbjIjYAcLgBSrTPKNt8zvE", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 60, "isCore": false, "isKeyInfluencer": false}, {"id": "Ahmed Nayani", "category": "Wider Community", "occupation": "Franchise Marketing Expert | Strategic Partner to Leading Franchise Brands | 400+ Brands Across North America | Founder @Hoopdesk", "url": "https://www.linkedin.com/in/ed-nayani/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQHJBN_DGMVBCA/profile-displayphoto-crop_800_800/B4EZymn.4wIMAI-/0/1772322027305?e=1776902400&v=beta&t=BbhhpXr4mhDSrgOxz-5r2AX5YpHyMLYVkcg1brg3FEo", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 31, "isCore": false, "isKeyInfluencer": false}, {"id": "Darren Cremins", "category": "Industry Voice", "occupation": "", "url": "https://www.linkedin.com/in/darren-cremins-24980810?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAJBV1kBDwne5siq1PN_iLFefW40zHdqMwI", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQHVk6r7Wfy_7A/profile-displayphoto-crop_800_800/B4EZwGbWXIH8AI-/0/1769634361989?e=1776902400&v=beta&t=fRBkvkOCbdBsi-t49tdCyIVdsoLrFsq64ftgn4B5bzg", "followers": "", "posts": 375, "totalLikes": 10081, "totalComments": 3559, "edgeWeight": 1081, "isCore": true, "isKeyInfluencer": true}, {"id": "Jesse Buckingham", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/jesse-buckingham-79649a26?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAVpMOIBmMPNOLA0LBoZ_ZqEU4v2vlHGJTc", "picture": "", "followers": "", "posts": 206, "totalLikes": 14048, "totalComments": 2057, "edgeWeight": 134, "isCore": true, "isKeyInfluencer": true}, {"id": "David Weinand", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/david-weinand-a62538?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAUKuoB3y9BmCjcCAKnqDLxLpYdqXFNOI8", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQHCzxTZHMQTiA/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1709224011056?e=1776902400&v=beta&t=eAZOybjLTlSuZtgKHz3sRWFOpud3aF-GlkowgxSCA60", "followers": "", "posts": 1, "totalLikes": 19, "totalComments": 0, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "Roch Lefran\u00e7ois", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/roch-lefrancois?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAACyFUx4Bin9Cr9hcJiFBC2alJiERWFWie2c", "picture": "https://media.licdn.com/dms/image/v2/C5603AQEFryup6DZpSw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1624471410364?e=1776902400&v=beta&t=NF8zqXk8FknysXW_4oNGUGMATjQQpveFBhypLN-j7j0", "followers": "", "posts": 19, "totalLikes": 465, "totalComments": 137, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": true}, {"id": "Sue McMahon", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/suemcmahon?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAIqUcsBhEB6tSObprakIp94-pE1nIxCbSA", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQHI7m9FNBzQMQ/profile-displayphoto-shrink_800_800/B4EZOrUeFVHAAc-/0/1733746091274?e=1776902400&v=beta&t=xkt3QO067ho160HbxYxLPDQVnuO-i0MnultnN8qwGJM", "followers": "", "posts": 5, "totalLikes": 241, "totalComments": 10, "edgeWeight": 4, "isCore": true, "isKeyInfluencer": false}, {"id": "Jacob Rosenfeld", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/jacob-rosenfeld18?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAB5uMSEBdN5QpM62ayS_cmVgnMm3xSRvjvE", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQFkIl8C7ROYEw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1545175401597?e=1776902400&v=beta&t=CawPUysiFvMPbw0mtwwBSwfOMRAKgMO3DwM8kxSotVA", "followers": "", "posts": 200, "totalLikes": 7707, "totalComments": 1910, "edgeWeight": 107, "isCore": true, "isKeyInfluencer": true}, {"id": "Julian Hafner", "category": "Retail & Tech Commentator", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/julianhafner?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABtTjrYBiJcfiNN3qYo-X85xZgtKxt8IEM0", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEWffIzNtOpvw/profile-displayphoto-shrink_800_800/B4EZSosc9pG0Ak-/0/1737997013304?e=1776902400&v=beta&t=7W1xTQEPHW0MlTMyJHCsTpwjPD_XdOil_hnanuXI4Xo", "followers": "", "posts": 17, "totalLikes": 976, "totalComments": 21, "edgeWeight": 7, "isCore": true, "isKeyInfluencer": false}, {"id": "George Nott", "category": "Media & Journalist", "occupation": "Leading automation & robotics solutions with responsibility for strategy, commercial performance and delivery. Translating automation into measurable business outcomes, delivered with engineering discipline and trust", "url": "https://www.linkedin.com/in/george-nott-87710079?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABCRINsB23JSMSP3a7Icv2EPObWUVo0C1U8", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGb0QkxaRQ2gA/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1683708858547?e=1776902400&v=beta&t=0-dr50VYre1yfgM_mAlX7jT4hwbxqWTmJn4IT6fxFrU", "followers": "", "posts": 3, "totalLikes": 144, "totalComments": 0, "edgeWeight": 1, "isCore": true, "isKeyInfluencer": true}, {"id": "Bianca Gfrei", "category": "Wider Community", "occupation": "CEO & 2x Health-Tech Founder (VC-backed, exited) | Leadership Visionary & Executive Coach | Creator of Founders Who Thrive | Leadership from Aliveness, not Survival", "url": "https://www.linkedin.com/in/biancagfrei/", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQHpDUUWCAJP_Q/profile-displayphoto-crop_800_800/B4DZw9JgsjKwA8-/0/1770552432751?e=1776902400&v=beta&t=B79dJ9WvoSPdagMCMEZX46fCEDjOeCyfXMrUWNR7DCU", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 29, "isCore": false, "isKeyInfluencer": false}, {"id": "Anthony P.", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/anthonypennington?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAnFWlMB7PU50lUNuD1zALtEQTZhhPasfPk", "picture": "https://media.licdn.com/dms/image/v2/D4E35AQG2RMZJGPFMOQ/profile-framedphoto-shrink_800_800/B4EZo_6s1WHoAk-/0/1762008944218?e=1776171600&v=beta&t=3WiU_8O-Avp147ul-Pa4vexmZy6p4xsC10B8j4d84L4", "followers": "", "posts": 1, "totalLikes": 37, "totalComments": 3, "edgeWeight": 5, "isCore": true, "isKeyInfluencer": false}, {"id": "Drew Cashmore", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/drewcashmore?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAFabM0BEYNNIebo3x8EtiBbzJ3KNs8iTac", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQG83vN8zmBvSA/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1667358158892?e=1776902400&v=beta&t=i90FMe3kl_kG89OQfvfBWlvoYgXC7H5RMzcPGXN_th4", "followers": "", "posts": 1, "totalLikes": 32, "totalComments": 8, "edgeWeight": 5, "isCore": true, "isKeyInfluencer": false}, {"id": "Meghan Swidler", "category": "Wider Community", "occupation": "deep cellular detox + root-cause healing for gut, hormone, thyroid, energy, skin, metabolic, and mitochondrial health. | top holistic health & detox expert, author, speaker, investor, advisor.", "url": "https://www.linkedin.com/in/meghanswidler/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQG8hkXi5Ovfkw/profile-displayphoto-shrink_800_800/B56ZS3e6xEHEAc-/0/1738245123520?e=1776902400&v=beta&t=iaksbrEIRnlTUy-FON6mIMyoVGjwhMUbTkU8NhhhuHk", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 31, "isCore": false, "isKeyInfluencer": false}, {"id": "Denise Hendricks, DCL., MACL.", "category": "Wider Community", "occupation": "Strategic Franchise Marketer | Scaling Franchisors with Performance-Driven Digital Marketing | 15+ Years of Proven Growth | Partner @Hoopdesk", "url": "https://www.linkedin.com/in/deniseahendricks/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQEAm3kmQYzhpA/profile-displayphoto-crop_800_800/B56ZzDekRoKEAM-/0/1772806096398?e=1776902400&v=beta&t=RCQGjUOUnmWDCGps2dqCg355Vggn8IcJ_wRnN-6zjKE", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 66, "isCore": false, "isKeyInfluencer": false}, {"id": "Mat Ankers", "category": "Ocado", "occupation": "", "url": "https://www.linkedin.com/in/mat-ankers-82970226?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAVxhiEByzovOQD1xAxLE7MghMKbpjz-9ZE", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQE3jGg6Ul-Dkg/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1706523029073?e=1776902400&v=beta&t=WesFatcOySVlgqVqn_WRMQIhmGFRWZLlwdg5oOQf4WQ", "followers": "", "posts": 7, "totalLikes": 704, "totalComments": 17, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": true}, {"id": "Adam Warby", "category": "Ocado", "occupation": "Chair at Ocado Plc , Experienced NED and Senior Adviser to PE", "url": "https://www.linkedin.com/in/adam-warby-a1b678", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQEWTH7I9ecoXA/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1516247315854?e=1776902400&v=beta&t=E5uXkB76wSGDrawHtdB-s-f_VABrxAKs-PN6qc1naM0", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "Hannah Gibson OBE", "category": "Media & Journalist", "occupation": "Chief Financial Officer - Ocado Retail", "url": "https://www.linkedin.com/in/hannah-gibson-obe-40a93743?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAk3AIoBqpYPkSMhd8ofqed1JrwX4zbdgfE", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGUuS8bK5k2aQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1728490589360?e=1776902400&v=beta&t=9XczZPczs4-3QJb3uz1AS6qLVd6OFAw6zp7K4YMbFvk", "followers": "", "posts": 1, "totalLikes": 599, "totalComments": 12, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "Arsalan Baig", "category": "Wider Community", "occupation": "CTO @ Techinoid LLC | Building AI-layered Digital Signage", "url": "https://www.linkedin.com/in/arsalan-baig/", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQH8O0z5u6Mnbg/profile-displayphoto-crop_800_800/B4DZk90TonIYAI-/0/1757678747515?e=1776902400&v=beta&t=LXLO2mLK4s22eo4Qpr1iy-q6EAwXL_PpjE1aEJskkrc", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 39, "isCore": false, "isKeyInfluencer": false}, {"id": "Jan Zizka", "category": "Sector Exec", "occupation": "", "url": "https://www.linkedin.com/in/jzizka?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAABQjfFQBlw5kQ-zrf7_71EMLT1k97B4R9Dw", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGe7Olwnfx0Hw/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1678004710091?e=1776902400&v=beta&t=7eCK3lkxm0InMkn5W6fqbEIkXnZVQbxhyGe8BpJ2reA", "followers": "", "posts": 99, "totalLikes": 8547, "totalComments": 692, "edgeWeight": 89, "isCore": true, "isKeyInfluencer": true}, {"id": "RTMNexus", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/company/rtmnexus/posts", "picture": "https://media.licdn.com/dms/image/v2/D4E0BAQEWknBSh5P8hA/company-logo_400_400/B4EZWLlZooHUAY-/0/1741803592527/rtm_nexus_logo?e=1776902400&v=beta&t=xO9p_vdFZTmpIIv0-ltmKecSLphHrg-Cic2GP4aqfb8", "followers": "2,978", "posts": 5, "totalLikes": 62, "totalComments": 29, "edgeWeight": 3, "isCore": true, "isKeyInfluencer": false}, {"id": "David Foerstner", "category": "Wider Community", "occupation": "Turning \u201cImpossible\u201d Food & Bev Ideas Into Scalable CPG Products | Chef-Trained \u2022 Supertaster \u2022 Sensory R&D \u2022 Full Scale Commercialization", "url": "https://www.linkedin.com/in/davidfoerstner/", "picture": "https://media.licdn.com/dms/image/v2/D4D03AQFSGUVu2NhSjA/profile-displayphoto-crop_800_800/B4DZnzN7VcIgAI-/0/1760722138822?e=1776902400&v=beta&t=I1QOEuLFdN5Ggpaf48jFFfoDrDUaODQzNN5wSi_mAnQ", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 27, "isCore": false, "isKeyInfluencer": false}, {"id": "Amit Agrawal", "category": "Wider Community", "occupation": "M&A | Business Development | Sales & Marketing Strategy | Corporate Communications", "url": "https://www.linkedin.com/in/amitagrawalnyc/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEfs7UKPFpQDg/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1715225885157?e=1776902400&v=beta&t=kTEMUeeWTzzd5In224A42qM8vMpfn-r0BezUbebqsUg", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 44, "isCore": false, "isKeyInfluencer": false}, {"id": "Rebecca A. Styn, Ph.D.", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/rebeccastyn?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAACvZVIBBWr4otjovT48XW7GujZGngPMJjM", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEholk-oEBR_w/profile-displayphoto-crop_800_800/B4EZzdd9qfHsAE-/0/1773242154989?e=1776902400&v=beta&t=sIPOnEpRwdQNJBR02df_WzDYqWTrOIWa5ec7TWx3gK8", "followers": "", "posts": 7, "totalLikes": 792, "totalComments": 118, "edgeWeight": 11, "isCore": true, "isKeyInfluencer": false}, {"id": "Ian Scott", "category": "Wider Community", "occupation": "RETHINK Retail Top Retail Expert, Understanding the shifting retail landscape, delivering actionable solutions with global shopper marketing insights and a customer centric perspective.", "url": "https://www.linkedin.com/in/ian-scott-0534694/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEF7Nub9E478w/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1700698225463?e=1776902400&v=beta&t=B1hThS2Ld_r8e6msbRHtYdwba9yLEhnSYgjh5rhY3v0", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 23, "isCore": false, "isKeyInfluencer": false}, {"id": "Peter Wirth", "category": "Retail & Tech Commentator", "occupation": "Founder and CEO @ Brightpick | Founder @ Photoneo (acquired by Zebra Technologies) | Multi-purpose AI robots for warehouses \ud83e\udd16", "url": "https://www.linkedin.com/in/peter-wirth?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAA-AqfkBAQmahlStpursFd3hUrT7r26xNZA", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGAN25JDGvP7g/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1687858175447?e=1776902400&v=beta&t=mEUG65Npgk4X-nzojcL5FASqf_PQUQEbmvgrLP_F-yM", "followers": "", "posts": 4, "totalLikes": 954, "totalComments": 72, "edgeWeight": 5, "isCore": true, "isKeyInfluencer": false}, {"id": "Barney \ud83c\udf1e Stacher", "category": "Wider Community", "occupation": "Working with Founders/Executives of Brands and Retailers to Innovate and Transform B2B2C Engagement and Human to Human Connection. Implementing Tech/AI with ROI. REThink Retail Advisory. The Future of Retail.", "url": "https://www.linkedin.com/in/barneystacher/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFfNODWxicdng/profile-displayphoto-crop_800_800/B4EZzTvF4OJEAI-/0/1773078869354?e=1776902400&v=beta&t=EKadVc4B5KPES0hESN7EASSjfY2mpRUNqmgtgObN34I", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 38, "isCore": false, "isKeyInfluencer": false}, {"id": "Jen Lee", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/jenleeberkeley?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAiIWUoBev0w7qF4UxHBRJv1MnurcwoDfFo", "picture": "https://media.licdn.com/dms/image/v2/C5603AQFQ_I9-BMsztQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1516888341017?e=1776902400&v=beta&t=iEn-dBZ66hDhoTc9XjuKyIIWJ0dkDc7Bv_Qd9Nj4d_0", "followers": "", "posts": 4, "totalLikes": 471, "totalComments": 34, "edgeWeight": 7, "isCore": true, "isKeyInfluencer": false}, {"id": "Linda Voracek", "category": "Wider Community", "occupation": "Advisor | Consultant, Global Retail & Consumer Brands | C-Suite Retail & Merchandising Executive | CEO & 3x Founder | Board Member", "url": "https://www.linkedin.com/in/lindavoracek/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQHRHXmUNedTYw/profile-displayphoto-crop_800_800/B56Z1PtxNAIIAI-/0/1775158895242?e=1776902400&v=beta&t=41YjME37NSkNxU6LAy0K1UYOkUfQ1VlUrnKIvL_M2T0", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 23, "isCore": false, "isKeyInfluencer": false}, {"id": "Jonathan Valencia", "category": "Wider Community", "occupation": "Co-Founder/Sales Dir. at Sabanero NY Distribution", "url": "https://www.linkedin.com/in/jonathan-valencia-366b001b3/", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQH66V7ZDNZYqA/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1722338394324?e=1776902400&v=beta&t=sg3zNq0NF2eSebmXNt9-rJ2_nvncS3pCvEhNB3TsVKA", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 29, "isCore": false, "isKeyInfluencer": false}, {"id": "Neil Saunders", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/neilretail?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAMHx2EB4Jmf5RhikbkFFgAPL_LVQH5zBcI", "picture": "https://media.licdn.com/dms/image/v2/C4D03AQGG-LfdRXaelg/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1516551242428?e=1776902400&v=beta&t=Bj1T1IzW6nes0mTALXpc5Wlc6uRHZ1wFZfx7OqT7GOQ", "followers": "", "posts": 1, "totalLikes": 55, "totalComments": 8, "edgeWeight": 12, "isCore": true, "isKeyInfluencer": false}, {"id": "\ud83c\udfafPhil Rees", "category": "Wider Community", "occupation": "Looking to sell or scale your 3PL? Get in touch ..", "url": "https://www.linkedin.com/in/international-ecommerce/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQFMssfVVfOO9A/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1725665996308?e=1776902400&v=beta&t=n3f3OgX0bf6a4kB4sSl86wUaHj0vf83HgvQKJ2j0zjI", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 80, "isCore": false, "isKeyInfluencer": false}, {"id": "Cathy Hotka", "category": "Retail & Tech Commentator", "occupation": "Top Retail Voice | Podcast Host & Producer | ex-Microsoft Retail GTM Leader | RETHINK Retail Top Retail Expert | Retail Cloud Alliance Advisory Council | RetailWire BrainTrust", "url": "https://www.linkedin.com/in/cathyhotka?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAAF2hQBGsv5J-ppHEXCJPUOlVCwUjRB1ZA", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQEQ7H0HODBLCw/profile-displayphoto-crop_800_800/B4EZoxHCLKIoAI-/0/1761760520222?e=1776902400&v=beta&t=0fnkxgkahs089qE7gS3KgOCOS7hZviTgz2rgNo8eg0s", "followers": "", "posts": 2, "totalLikes": 33, "totalComments": 1, "edgeWeight": 6, "isCore": true, "isKeyInfluencer": false}, {"id": "Eric M.", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/eric-martindale-amazonagency?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAAAP-Y64BJm87T4EC8hpboxLX0kV_ZUyQID8", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGsL0ALlSwyuQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1698450325990?e=1776902400&v=beta&t=d5qz5yY9iSiLe8jEhC9HT2FAIACMQnBiRWHoa98IvG4", "followers": "", "posts": 2, "totalLikes": 141, "totalComments": 163, "edgeWeight": 202, "isCore": true, "isKeyInfluencer": false}, {"id": "Eric Miller", "category": "Wider Community", "occupation": "Building rugged tech that WORKS to bring reliability and certainty to operations, even in harsh environments | CEO at JLT Mobile Computers Inc. | Helping field teams increase throughput through rugged technology", "url": "https://www.linkedin.com/in/eric-miller-4972946a/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQHsxJMx8fNcVg/profile-displayphoto-crop_800_800/B56ZpNcDC2G4AI-/0/1762235795851?e=1776902400&v=beta&t=dB3NS4sYGT2sQQ3LI3fAdMi0OGZHGvQXESoCrnDTmPs", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 23, "isCore": false, "isKeyInfluencer": false}, {"id": "Ray Jang", "category": "Wider Community", "occupation": "Making ad creatives simple with AI | Founder, CEO at Atria (tryatria.com) \ud83d\ude80 | Ex-TikTok", "url": "https://www.linkedin.com/in/rayjbjang/", "picture": "https://media.licdn.com/dms/image/v2/D5635AQGGcut02H-x7A/profile-framedphoto-shrink_800_800/B56Z1mIr55IMAk-/0/1775535046491?e=1776171600&v=beta&t=gR0VwPIydLgHYWn-1OQGpPz07LRCdW3rw6rirCIl4aE", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 114, "isCore": false, "isKeyInfluencer": false}, {"id": "Jeff Smith", "category": "Retail & Tech Commentator", "occupation": "Relentlessly dedicated to innovation.", "url": "https://www.linkedin.com/in/jeff-smith-800081178?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAACoDU0ABFar9YOGOiCVKqJVitEnQ_JKPuvU", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQFU7-lB_0D8Fg/profile-displayphoto-crop_800_800/B4EZwB.t8oGsAI-/0/1769559744596?e=1776902400&v=beta&t=5jjO_dXVebnWYz3uSZ_Fdj-oq_sHyReJXd7ph8j3D6o", "followers": "", "posts": 1, "totalLikes": 234, "totalComments": 55, "edgeWeight": 4, "isCore": true, "isKeyInfluencer": false}, {"id": "Maddie Parker", "category": "Media & Journalist", "occupation": "Consumer Reporter at Bloomberg News", "url": "https://www.linkedin.com/in/maddie-parker-316127241", "picture": "https://media.licdn.com/dms/image/v2/D4E03AQGLbh2OJ5lO1g/profile-displayphoto-crop_800_800/B4EZpTunRQIQAI-/0/1762341320464?e=1776902400&v=beta&t=0_OEHkndBo9EjHPnMgGwRi4IOxOM_2sIHeRbrOOu0yU", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 0, "isCore": true, "isKeyInfluencer": true}, {"id": "Lynne Karlowich", "category": "Wider Community", "occupation": "Franchise Advisor Supporting 100+ Brands | Helping Business Owners Expand Through FranchiseFlow | Strategic Growth Partner @Hoopdesk | 7+ Years in Client Engagement", "url": "https://www.linkedin.com/in/lynne-karlowich-722b58181/", "picture": "https://media.licdn.com/dms/image/v2/D5603AQEz1A6lKOu5_Q/profile-displayphoto-crop_800_800/B56Zhlg7yeHcAM-/0/1754049790043?e=1776902400&v=beta&t=pfIQxS1ch9mKvC65AFhqWmUNLJeIgTIc4-vZQgpEEXE", "followers": "", "posts": 0, "totalLikes": 0, "totalComments": 0, "edgeWeight": 33, "isCore": false, "isKeyInfluencer": false}];
+const rawEdges = [{"source": "Jesse Buckingham", "target": "Vitalii Honcharenko", "weight": 58}, {"source": "Eric Williams", "target": "Jesse Buckingham", "weight": 27}, {"source": "Marie-Axelle Loustalot-Forest", "target": "Vineta Bajaj", "weight": 19}, {"source": "Tom Andersson", "target": "Vineta Bajaj", "weight": 2}, {"source": "Marie-Axelle Loustalot-Forest", "target": "Peter Skov", "weight": 37}, {"source": "Jacob Rosenfeld", "target": "Jeff Smith", "weight": 1}, {"source": "Megan Harmon", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 18}, {"source": "Greg Buzek", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 8}, {"source": "Drew Cashmore", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 5}, {"source": "James Palmer FCILT", "target": "Peter Skov", "weight": 2}, {"source": "James Palmer FCILT", "target": "Marie-Axelle Loustalot-Forest", "weight": 2}, {"source": "Isaac Griffith", "target": "James Palmer FCILT", "weight": 2}, {"source": "Eric M.", "target": "Peter Michael Gialantzis", "weight": 177}, {"source": "Haughey, Stephanie", "target": "Peter Michael Gialantzis", "weight": 37}, {"source": "Derek Gould", "target": "Peter Michael Gialantzis", "weight": 41}, {"source": "Jonathan Valencia", "target": "Peter Michael Gialantzis", "weight": 13}, {"source": "Can Koyuncu", "target": "Peter Michael Gialantzis", "weight": 59}, {"source": "Cathy Hotka", "target": "Ken Fenyo", "weight": 3}, {"source": "Mat Ankers", "target": "Matt Hopkins", "weight": 1}, {"source": "Darren Cremins", "target": "Joi A. McMillon BSN-MBA HA-CRRN-WCC-HACP-CMS-CIC- AL-CIP", "weight": 157}, {"source": "Darren Cremins", "target": "Seth Yakatan", "weight": 74}, {"source": "Darren Cremins", "target": "Ray Jang", "weight": 114}, {"source": "Darren Cremins", "target": "Megan Harmon", "weight": 9}, {"source": "Arsalan Baig", "target": "Darren Cremins", "weight": 39}, {"source": "Darren Cremins", "target": "Denise Hendricks, DCL., MACL.", "weight": 66}, {"source": "Darren Cremins", "target": "Rahi Jain", "weight": 61}, {"source": "David Abadin \ud83e\udea9", "target": "Derek Gould", "weight": 11}, {"source": "David Abadin \ud83e\udea9", "target": "\ud83c\udfafPhil Rees", "weight": 1}, {"source": "David Abadin \ud83e\udea9", "target": "Eric M.", "weight": 15}, {"source": "Brenda Steele", "target": "David Abadin \ud83e\udea9", "weight": 23}, {"source": "David Abadin \ud83e\udea9", "target": "Jonathan Valencia", "weight": 16}, {"source": "Jan Zizka", "target": "Marie-Axelle Loustalot-Forest", "weight": 5}, {"source": "Jan Zizka", "target": "Tim Shea", "weight": 39}, {"source": "Darren Cremins", "target": "Sean Field", "weight": 18}, {"source": "Brendon Gardner", "target": "Sean Field", "weight": 45}, {"source": "Ian Scott", "target": "Sean Field", "weight": 12}, {"source": "Isaac Griffith", "target": "Marie-Axelle Loustalot-Forest", "weight": 4}, {"source": "Jeremy Baksht", "target": "Jesse Buckingham", "weight": 26}, {"source": "Isaac Griffith", "target": "Vineta Bajaj", "weight": 5}, {"source": "Isaac Griffith", "target": "Peter Skov", "weight": 8}, {"source": "Eric Miller", "target": "Peter Skov", "weight": 6}, {"source": "Eric Miller", "target": "Jacob Rosenfeld", "weight": 16}, {"source": "Neil Saunders", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 1}, {"source": "Darren Cremins", "target": "Neil Saunders", "weight": 1}, {"source": "Meghan Swidler", "target": "Peter Michael Gialantzis", "weight": 31}, {"source": "Mark Tsemak", "target": "Peter Michael Gialantzis", "weight": 42}, {"source": "Barney \ud83c\udf1e Stacher", "target": "Peter Michael Gialantzis", "weight": 37}, {"source": "Darren Cremins", "target": "Linda Voracek", "weight": 23}, {"source": "Chris Niesen", "target": "Darren Cremins", "weight": 34}, {"source": "Darren Cremins", "target": "Sean Wendt", "weight": 26}, {"source": "Darren Cremins", "target": "Eric M.", "weight": 6}, {"source": "Darren Cremins", "target": "Shreya Vohora", "weight": 32}, {"source": "Darren Cremins", "target": "Victoria Morel", "weight": 54}, {"source": "Ashley Rogers", "target": "David Abadin \ud83e\udea9", "weight": 2}, {"source": "David Abadin \ud83e\udea9", "target": "Jeff Smith", "weight": 1}, {"source": "Megan Harmon", "target": "RTMNexus", "weight": 1}, {"source": "David Foerstner", "target": "Peter Michael Gialantzis", "weight": 24}, {"source": "Rebecca A. Styn, Ph.D.", "target": "Samantha Fletcher", "weight": 2}, {"source": "Derek Gould", "target": "Rebecca A. Styn, Ph.D.", "weight": 3}, {"source": "Florian Palatini", "target": "Jan Zizka", "weight": 13}, {"source": "Ben Angel", "target": "Jan Zizka", "weight": 1}, {"source": "Julian Hafner", "target": "Stefano Francavilla", "weight": 2}, {"source": "Curtis Knight II", "target": "David Abadin \ud83e\udea9", "weight": 7}, {"source": "Marie-Axelle Loustalot-Forest", "target": "Sean Field", "weight": 1}, {"source": "Peter Skov", "target": "Tim Shea", "weight": 5}, {"source": "Eric Williams", "target": "Robert Garrison", "weight": 1}, {"source": "Curtis Knight II", "target": "Peter Michael Gialantzis", "weight": 22}, {"source": "Peter Michael  Gialantzis", "target": "Peter Michael Gialantzis", "weight": 113}, {"source": "Ken Fenyo", "target": "Marie-Axelle Loustalot-Forest", "weight": 3}, {"source": "Jan Zizka", "target": "Peter Skov", "weight": 4}, {"source": "David Abadin \ud83e\udea9", "target": "David Foerstner", "weight": 1}, {"source": "Marie-Axelle Loustalot-Forest", "target": "Tom Andersson", "weight": 5}, {"source": "Tim Shea", "target": "Vineta Bajaj", "weight": 3}, {"source": "David Weinand", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 1}, {"source": "Jon Stine", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 4}, {"source": "Darren Cremins", "target": "\ud83c\udfafPhil Rees", "weight": 78}, {"source": "Darren Cremins", "target": "Ian Scott", "weight": 11}, {"source": "Jai Mishra", "target": "Jesse Buckingham", "weight": 22}, {"source": "Lukas M. Ziegler", "target": "Peter Skov", "weight": 5}, {"source": "James Palmer FCILT", "target": "Vineta Bajaj", "weight": 2}, {"source": "Brittain Ladd", "target": "Vineta Bajaj", "weight": 2}, {"source": "Ken Fenyo", "target": "Sean Field", "weight": 1}, {"source": "Noel Pennington", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 2}, {"source": "Kit Campoy", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 5}, {"source": "Jan Zizka", "target": "Lukas M. Ziegler", "weight": 16}, {"source": "Megan Harmon", "target": "Noel Pennington", "weight": 1}, {"source": "Ashley Rogers", "target": "Peter Michael Gialantzis", "weight": 3}, {"source": "David Abadin \ud83e\udea9", "target": "Peter Michael Gialantzis", "weight": 10}, {"source": "Anthony P.", "target": "Rebecca A. Styn, Ph.D.", "weight": 3}, {"source": "Anthony P.", "target": "Derek Gould", "weight": 1}, {"source": "Peter Michael Gialantzis", "target": "Rebecca A. Styn, Ph.D.", "weight": 1}, {"source": "Brenda Steele", "target": "Peter Michael Gialantzis", "weight": 16}, {"source": "David J. Haber", "target": "Jacob Rosenfeld", "weight": 44}, {"source": "Stefano Francavilla", "target": "Tim Shea", "weight": 6}, {"source": "David Foerstner", "target": "Rebecca A. Styn, Ph.D.", "weight": 1}, {"source": "Amit Agrawal", "target": "Jacob Rosenfeld", "weight": 44}, {"source": "Darren Cremins", "target": "Martin Hinojosa", "weight": 85}, {"source": "Slayton Campbell", "target": "Tim Shea", "weight": 12}, {"source": "Peter Michael Gialantzis", "target": "Taylor Walker", "weight": 2}, {"source": "Peter Wirth", "target": "Tim Shea", "weight": 3}, {"source": "Brian Schmitt", "target": "Darren Cremins", "weight": 35}, {"source": "Albin Paul", "target": "Ken Fenyo", "weight": 1}, {"source": "Ken Fenyo", "target": "Trevor Sumner", "weight": 1}, {"source": "Brittain Ladd", "target": "Jan Zizka", "weight": 3}, {"source": "Derek Gould", "target": "Eric M.", "weight": 1}, {"source": "Derek Gould", "target": "Peter Michael  Gialantzis", "weight": 1}, {"source": "Peter Michael  Gialantzis", "target": "Samantha Fletcher", "weight": 1}, {"source": "Trevor Sumner", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 4}, {"source": "Darren Cremins", "target": "Graham Soult FIPM", "weight": 1}, {"source": "Florian Palatini", "target": "Tim Shea", "weight": 2}, {"source": "Jan Zizka", "target": "Julian Hafner", "weight": 2}, {"source": "Marie-Axelle Loustalot-Forest", "target": "Slayton Campbell", "weight": 1}, {"source": "Darren Cremins", "target": "Jackson Pinkoski", "weight": 34}, {"source": "Greg Buzek", "target": "Jen Lee", "weight": 2}, {"source": "Cathy Hotka", "target": "Greg Buzek", "weight": 1}, {"source": "Darren Cremins", "target": "Lynne Karlowich", "weight": 33}, {"source": "Bianca Gfrei", "target": "Darren Cremins", "weight": 29}, {"source": "Jen Lee", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 4}, {"source": "Albin Paul", "target": "Sachin G.", "weight": 1}, {"source": "Albin Paul", "target": "Sean Field", "weight": 4}, {"source": "Graham Soult FIPM", "target": "Sean Field", "weight": 4}, {"source": "Branislav Pulis", "target": "Tim Shea", "weight": 1}, {"source": "George Nott", "target": "Sean Field", "weight": 1}, {"source": "Eric Miller", "target": "Lukas M. Ziegler", "weight": 1}, {"source": "Lukas M. Ziegler", "target": "Tim Shea", "weight": 1}, {"source": "Lukas M. Ziegler", "target": "Marie-Axelle Loustalot-Forest", "weight": 1}, {"source": "Jan Zizka", "target": "Peter Wirth", "weight": 2}, {"source": "Ashley Rogers", "target": "Eric M.", "weight": 2}, {"source": "Jacob Rosenfeld", "target": "Roch Lefran\u00e7ois", "weight": 2}, {"source": "Peter Michael  Gialantzis", "target": "Rebecca A. Styn, Ph.D.", "weight": 1}, {"source": "Darren Cremins", "target": "Sachin G.", "weight": 25}, {"source": "Ahmed Nayani", "target": "Darren Cremins", "weight": 31}, {"source": "Albin Paul", "target": "Darren Cremins", "weight": 2}, {"source": "Brittain Ladd", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 5}, {"source": "Brittain Ladd", "target": "Peter Michael Gialantzis", "weight": 2}, {"source": "Anthony P.", "target": "Peter Michael Gialantzis", "weight": 1}, {"source": "Jeff Strasser", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 2}, {"source": "Greg Buzek", "target": "Sue McMahon", "weight": 1}, {"source": "Keith Mercier", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 1}, {"source": "Jeff Strasser", "target": "Keith Mercier", "weight": 1}, {"source": "Barney \ud83c\udf1e Stacher", "target": "Trevor Sumner", "weight": 1}, {"source": "Haughey, Stephanie", "target": "Jeff Smith", "weight": 1}, {"source": "Branislav Pulis", "target": "Jan Zizka", "weight": 1}, {"source": "Jeff Strasser", "target": "Sue McMahon", "weight": 1}, {"source": "Sue McMahon", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 1}, {"source": "Marianna Burchfield", "target": "Peter Michael Gialantzis", "weight": 3}, {"source": "Cathy Hotka", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 1}, {"source": "RTMNexus", "target": "\ud83c\udff7 Ricardo Belmar", "weight": 1}, {"source": "Incisiv", "target": "Jeremy Baksht", "weight": 1}, {"source": "Incisiv", "target": "Tim Shea", "weight": 1}, {"source": "David Weinand", "target": "Incisiv", "weight": 1}, {"source": "Haughey, Stephanie", "target": "Taylor Walker", "weight": 1}, {"source": "Ben Angel", "target": "Brittain Ladd", "weight": 5}, {"source": "Brittain Ladd", "target": "Neil Saunders", "weight": 10}, {"source": "Brittain Ladd", "target": "Jeremy Baksht", "weight": 1}, {"source": "Alex Harvey", "target": "Ben Angel", "weight": 2}, {"source": "Isabella Fish", "target": "Richard Fletcher", "weight": 1}, {"source": "Lukas M. Ziegler", "target": "Tom Andersson", "weight": 2}];
+
+const CATS = {
+  'Ocado':            { color: '#4caf50', order: 0 },
+  'Ocado Alumni':     { color: '#26a69a', order: 1 },
+  'Media & Journalist': { color: '#ef5350', order: 2 },
+  'Industry Voice':   { color: '#64b5f6', order: 3 },
+  'Sector Exec':      { color: '#ffa726', order: 4 },
+  'Corporate Leader': { color: '#ce93d8', order: 5 },
+  'Ocado Ecosystem':  { color: '#66bb6a', order: 6 },
+  'Retail & Tech Commentator': { color: '#e8b74a', order: 7 },
+  'Wider Community': { color: '#b07cc6', order: 8 }
+};
+
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+const svg = d3.select('#network')
+  .attr('width', width)
+  .attr('height', height);
+
+// Defs for glow
+const defs = svg.append('defs');
+const glow = defs.append('filter').attr('id', 'glow');
+glow.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+const merge = glow.append('feMerge');
+merge.append('feMergeNode').attr('in', 'blur');
+merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+const g = svg.append('g');
+
+// Zoom
+const zoom = d3.zoom()
+  .scaleExtent([0.2, 5])
+  .on('zoom', (e) => g.attr('transform', e.transform));
+svg.call(zoom);
+
+// Prepare data
+const nodeMap = new Map();
+rawNodes.forEach(n => {
+  n.connections = 0;
+  nodeMap.set(n.id, n);
+});
+
+const edges = rawEdges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target));
+edges.forEach(e => {
+  nodeMap.get(e.source).connections += e.weight;
+  nodeMap.get(e.target).connections += e.weight;
+});
+
+const nodes = rawNodes.filter(n => nodeMap.has(n.id));
+
+// Scales
+const radiusScale = d3.scaleSqrt()
+  .domain([0, d3.max(nodes, d => d.connections)])
+  .range([4, 32]);
+
+const edgeWidthScale = d3.scaleSqrt()
+  .domain([1, d3.max(edges, d => d.weight)])
+  .range([0.5, 5]);
+
+const edgeOpacityScale = d3.scaleLinear()
+  .domain([1, d3.max(edges, d => d.weight)])
+  .range([0.08, 0.45]);
+
+// Simulation
+const simulation = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(edges).id(d => d.id).distance(d => 120 / Math.sqrt(d.weight)).strength(d => Math.min(0.5, d.weight * 0.03)))
+  .force('charge', d3.forceManyBody().strength(d => d.isKeyInfluencer ? -300 : -120))
+  .force('center', d3.forceCenter(width / 2, height / 2))
+  .force('collision', d3.forceCollide(d => radiusScale(d.connections) + 4))
+  .force('x', d3.forceX(width / 2).strength(0.03))
+  .force('y', d3.forceY(height / 2).strength(0.03));
+
+// Links
+const linkGroup = g.append('g');
+const link = linkGroup.selectAll('line')
+  .data(edges)
+  .join('line')
+  .attr('stroke', '#ffffff')
+  .attr('stroke-opacity', d => edgeOpacityScale(d.weight))
+  .attr('stroke-width', d => edgeWidthScale(d.weight));
+
+// Node groups
+const nodeGroup = g.append('g');
+const node = nodeGroup.selectAll('g')
+  .data(nodes)
+  .join('g')
+  .attr('cursor', 'pointer')
+  .call(d3.drag()
+    .on('start', dragStarted)
+    .on('drag', dragged)
+    .on('end', dragEnded));
+
+// Node circles
+node.append('circle')
+  .attr('r', d => radiusScale(d.connections))
+  .attr('fill', d => (CATS[d.category] || CATS['Wider Community']).color)
+  .attr('fill-opacity', d => d.isKeyInfluencer ? 0.85 : 0.5)
+  .attr('stroke', d => (CATS[d.category] || CATS['Wider Community']).color)
+  .attr('stroke-width', d => d.isKeyInfluencer ? 2 : 0.5)
+  .attr('stroke-opacity', d => d.isKeyInfluencer ? 0.6 : 0.2)
+  .attr('filter', d => d.isKeyInfluencer && d.connections > 20 ? 'url(#glow)' : null);
+
+// Labels (only for key influencers or high-connection nodes)
+const labels = node.append('text')
+  .text(d => {
+    let name = d.id;
+    if (name.startsWith('🏷')) name = name.replace('🏷 ', '');
+    if (name.includes('🪩')) name = name.replace(' 🪩', '');
+    return name;
+  })
+  .attr('x', d => radiusScale(d.connections) + 4)
+  .attr('y', 3)
+  .attr('font-size', d => d.isKeyInfluencer ? '10.5px' : '9px')
+  .attr('font-weight', d => d.isKeyInfluencer ? '500' : '300')
+  .attr('fill', d => d.isKeyInfluencer ? '#c8cdd8' : '#6b7385')
+  .attr('opacity', d => (d.isKeyInfluencer || d.connections >= 15) ? 1 : 0)
+  .attr('class', 'node-label');
+
+let showLabels = true;
+
+// Tooltip
+const tooltip = document.getElementById('tooltip');
+
+node.on('mouseover', function(event, d) {
+  const catInfo = CATS[d.category] || CATS['Wider Community'];
+  tooltip.innerHTML = `
+    <div class="cat-badge" style="background:${catInfo.color}22;color:${catInfo.color}">${d.category}</div>
+    <div class="name">${d.id}</div>
+    <div class="occ">${d.occupation || 'No occupation listed'}</div>
+    <div class="stat"><span>Comment interactions</span><strong>${d.connections}</strong></div>
+    <div class="stat"><span>Posts in dataset</span><strong>${d.posts}</strong></div>
+    ${d.totalLikes ? `<div class="stat"><span>Total likes</span><strong>${d.totalLikes.toLocaleString()}</strong></div>` : ''}
+    ${d.followers ? `<div class="stat"><span>Followers</span><strong>${d.followers}</strong></div>` : ''}
+  `;
+  tooltip.classList.add('visible');
+  tooltip.style.left = (event.pageX + 16) + 'px';
+  tooltip.style.top = (event.pageY - 10) + 'px';
+
+  // Highlight connected
+  const connected = new Set();
+  edges.forEach(e => {
+    const src = typeof e.source === 'object' ? e.source.id : e.source;
+    const tgt = typeof e.target === 'object' ? e.target.id : e.target;
+    if (src === d.id) connected.add(tgt);
+    if (tgt === d.id) connected.add(src);
+  });
+  connected.add(d.id);
+
+  node.select('circle')
+    .attr('fill-opacity', n => connected.has(n.id) ? 0.9 : 0.08)
+    .attr('stroke-opacity', n => connected.has(n.id) ? 0.8 : 0.05);
+  labels.attr('opacity', n => {
+    if (!showLabels) return connected.has(n.id) ? 1 : 0;
+    return connected.has(n.id) ? 1 : 0.1;
+  });
+  link
+    .attr('stroke-opacity', e => {
+      const src = typeof e.source === 'object' ? e.source.id : e.source;
+      const tgt = typeof e.target === 'object' ? e.target.id : e.target;
+      return (src === d.id || tgt === d.id) ? 0.6 : 0.02;
+    })
+    .attr('stroke', e => {
+      const src = typeof e.source === 'object' ? e.source.id : e.source;
+      const tgt = typeof e.target === 'object' ? e.target.id : e.target;
+      return (src === d.id || tgt === d.id) ? catInfo.color : '#ffffff';
+    });
+})
+.on('mousemove', function(event) {
+  tooltip.style.left = (event.pageX + 16) + 'px';
+  tooltip.style.top = (event.pageY - 10) + 'px';
+})
+.on('mouseout', function() {
+  tooltip.classList.remove('visible');
+  resetHighlight();
+})
+.on('click', function(event, d) {
+  if (d.url) window.open(d.url, '_blank');
+});
+
+function resetHighlight() {
+  node.select('circle')
+    .attr('fill-opacity', d => d.isKeyInfluencer ? 0.85 : 0.5)
+    .attr('stroke-opacity', d => d.isKeyInfluencer ? 0.6 : 0.2);
+  labels.attr('opacity', d => {
+    if (!showLabels) return 0;
+    return (d.isKeyInfluencer || d.connections >= 15) ? 1 : 0;
+  });
+  link
+    .attr('stroke-opacity', d => edgeOpacityScale(d.weight))
+    .attr('stroke', '#ffffff');
+}
+
+// Simulation tick
+simulation.on('tick', () => {
+  link
+    .attr('x1', d => d.source.x)
+    .attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x)
+    .attr('y2', d => d.target.y);
+  node.attr('transform', d => `translate(${d.x},${d.y})`);
+});
+
+// Drag
+function dragStarted(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(event, d) {
+  d.fx = event.x; d.fy = event.y;
+}
+function dragEnded(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// Legend
+const legendEl = document.getElementById('legend');
+const usedCats = [...new Set(nodes.map(n => n.category))].sort((a,b) => (CATS[a]||CATS['Wider Community']).order - (CATS[b]||CATS['Wider Community']).order);
+legendEl.innerHTML = '<h3>Node Categories</h3>' + usedCats.map(cat => {
+  const c = (CATS[cat] || CATS['Wider Community']).color;
+  return `<div class="legend-item" data-cat="${cat}"><div class="legend-dot" style="background:${c}"></div>${cat}</div>`;
+}).join('');
+
+// Legend filtering
+let activeCats = new Set(usedCats);
+document.querySelectorAll('.legend-item').forEach(el => {
+  el.addEventListener('click', () => {
+    const cat = el.dataset.cat;
+    if (activeCats.has(cat)) {
+      activeCats.delete(cat);
+      el.classList.add('dimmed');
+    } else {
+      activeCats.add(cat);
+      el.classList.remove('dimmed');
+    }
+    node.attr('display', d => activeCats.has(d.category) ? null : 'none');
+    link.attr('display', e => {
+      const src = typeof e.source === 'object' ? e.source : nodeMap.get(e.source);
+      const tgt = typeof e.target === 'object' ? e.target : nodeMap.get(e.target);
+      return (activeCats.has(src.category) && activeCats.has(tgt.category)) ? null : 'none';
+    });
+  });
+});
+
+// Controls
+document.getElementById('btnReset').addEventListener('click', () => {
+  svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+  activeCats = new Set(usedCats);
+  document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('dimmed'));
+  node.attr('display', null);
+  link.attr('display', null);
+});
+
+document.getElementById('btnLabels').addEventListener('click', function() {
+  showLabels = !showLabels;
+  this.classList.toggle('active');
+  labels.attr('opacity', d => {
+    if (!showLabels) return 0;
+    return (d.isKeyInfluencer || d.connections >= 15) ? 1 : 0;
+  });
+});
+
+let tight = false;
+document.getElementById('btnStrength').addEventListener('click', function() {
+  tight = !tight;
+  this.classList.toggle('active');
+  simulation
+    .force('charge', d3.forceManyBody().strength(d => d.isKeyInfluencer ? (tight ? -150 : -300) : (tight ? -60 : -120)))
+    .alpha(0.5).restart();
+});
+
+// Search
+document.getElementById('searchInput').addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  if (!q) { resetHighlight(); return; }
+  const matches = new Set();
+  nodes.forEach(n => {
+    if (n.id.toLowerCase().includes(q) || (n.occupation||'').toLowerCase().includes(q)) matches.add(n.id);
+  });
+  node.select('circle')
+    .attr('fill-opacity', d => matches.has(d.id) ? 0.95 : 0.08)
+    .attr('stroke-opacity', d => matches.has(d.id) ? 0.8 : 0.05);
+  labels.attr('opacity', d => matches.has(d.id) ? 1 : 0.05);
+  link.attr('stroke-opacity', 0.02);
+});
+
+// Initial zoom to fit
+setTimeout(() => {
+  const bounds = g.node().getBBox();
+  const fullWidth = bounds.width;
+  const fullHeight = bounds.height;
+  const midX = bounds.x + fullWidth / 2;
+  const midY = bounds.y + fullHeight / 2;
+  const scale = 0.85 / Math.max(fullWidth / width, fullHeight / height);
+  const translate = [width / 2 - scale * midX, height / 2 - scale * midY];
+  svg.transition().duration(1000).call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
+}, 3000);
+</script>
+</body>
+</html>
